@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Base64. — Photo to Base64</title>
+<style>
+  :root {
+    --ink: #111214;
+    --paper: #eeece6;
+    --paper-dim: #e2dfd6;
+    --accent: #c22a1f;
+    --ok: #2f6b3a;
+    --rail-w: 300px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #eeece6;
+      --paper: #17181a;
+      --paper-dim: #212226;
+      --accent: #e2453a;
+      --ok: #6fbf7d;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    overflow: hidden;
+  }
+
+  #app { display: flex; flex-direction: row; height: 100vh; width: 100vw; }
+
+  /* ---------- RAIL ---------- */
+  #rail {
+    width: var(--rail-w);
+    min-width: 220px;
+    max-width: 340px;
+    flex-shrink: 0;
+    background: var(--paper-dim);
+    border-right: 3px solid var(--ink);
+    overflow-y: auto;
+    padding: 20px 18px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  header.wordmark h1 {
+    font-family: "Arial Narrow", Impact, sans-serif;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: -0.5px;
+    font-size: 34px;
+    margin: 0;
+    line-height: 0.9;
+  }
+  header.wordmark p {
+    margin: 6px 0 0;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    opacity: 0.65;
+  }
+
+  .rail-section { border-top: 2px solid var(--ink); padding-top: 16px; }
+
+  .rail-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    font-weight: 700;
+    margin: 0 0 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .rail-label .val { font-weight: 700; color: var(--accent); }
+
+  /* ---------- DROP ZONE ---------- */
+  .drop-zone {
+    border: 2px dashed var(--ink);
+    padding: 34px 12px;
+    text-align: center;
+    cursor: pointer;
+    display: block;
+    background: var(--paper);
+    transition: background 0.15s;
+  }
+  .drop-zone.over { background: var(--ink); color: var(--paper); }
+  .drop-zone svg { width: 44px; height: 44px; display: block; margin: 0 auto 8px; }
+  .drop-zone strong {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .drop-zone small {
+    display: block;
+    margin-top: 4px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    opacity: 0.6;
+  }
+  #file-input { display: none; }
+  #file-name {
+    margin: 10px 0 0;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    word-break: break-all;
+  }
+  #error-msg {
+    display: none;
+    margin: 10px 0 0;
+    padding: 8px 10px;
+    border: 2px solid var(--accent);
+    color: var(--accent);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  /* ---------- STATS ---------- */
+  .stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .stat {
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    padding: 8px;
+  }
+  .stat span {
+    display: block;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    opacity: 0.6;
+  }
+  .stat b { display: block; font-size: 15px; margin-top: 3px; }
+
+  /* ---------- ACTIONS ---------- */
+  .actions { display: flex; flex-direction: column; gap: 8px; }
+  .action-btn {
+    background: var(--ink);
+    color: var(--paper);
+    border: 2px solid var(--ink);
+    padding: 12px 8px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .action-btn:hover { opacity: 0.85; }
+  .action-btn.secondary { background: var(--paper); color: var(--ink); }
+  .action-btn.danger { background: var(--accent); color: var(--paper); }
+  .action-btn.big { padding: 18px 8px; font-size: 13px; letter-spacing: 1.2px; }
+  .action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  /* ---------- STAGE ---------- */
+  #stage {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--paper);
+  }
+  #preview {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 28px;
+  }
+  #preview img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border: 3px solid var(--ink);
+    box-shadow: 10px 10px 0 var(--ink);
+    display: none;
+  }
+  #empty-hint {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0.4;
+    text-align: center;
+    pointer-events: none;
+  }
+  #preview-tag {
+    position: absolute;
+    top: 14px; left: 14px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 6px 10px;
+    display: none;
+  }
+
+  #output-panel {
+    border-top: 3px solid var(--ink);
+    background: var(--paper-dim);
+    padding: 14px 18px 16px;
+    height: 34%;
+    min-height: 150px;
+    display: flex;
+    flex-direction: column;
+  }
+  #output-panel .rail-label { margin-bottom: 8px; }
+  #output {
+    flex: 1;
+    width: 100%;
+    resize: none;
+    background: var(--paper);
+    color: var(--ink);
+    border: 2px solid var(--ink);
+    padding: 10px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.35;
+    word-break: break-all;
+  }
+
+  #toast {
+    position: absolute;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    background: var(--accent);
+    color: #fff;
+    padding: 8px 14px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 5;
+  }
+  #toast.show { opacity: 1; }
+
+  #working {
+    position: absolute;
+    top: 14px; right: 14px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  #working.show { opacity: 0.6; }
+
+  /* ---------- RESPONSIVE ---------- */
+  @media (max-width: 720px) {
+    html, body { overflow: auto; }
+    #app { flex-direction: column; height: auto; }
+    #rail {
+      width: 100%;
+      max-width: none;
+      border-right: none;
+      border-bottom: 3px solid var(--ink);
+    }
+    #stage { height: 90vh; }
+  }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .rotate-row { display: flex; gap: 8px; }
+  .rail-btn {
+    flex: 1;
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    color: var(--ink);
+    padding: 10px 8px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .rail-btn:hover:not(:disabled) { background: var(--ink); color: var(--paper); }
+  .rail-btn:active:not(:disabled) { transform: translateY(1px); }
+  .rail-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .rail-btn .ico { font-size: 15px; vertical-align: -1px; margin-right: 4px; }
+  .steps {
+    margin: 0; padding: 0; list-style: none;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px;
+    line-height: 1.9; opacity: 0.75;
+  }
+  .steps b { color: var(--accent); margin-right: 6px; }
+  #stage.dropping #preview { outline: 3px dashed var(--accent); outline-offset: -14px; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <aside id="rail">
+    <header class="wordmark">
+      <h1>Base64.</h1>
+      <p>Photo to Base64 &mdash; Automatic</p>
+    </header>
+
+    <div class="rail-section" style="border-top:none; padding-top:0;">
+      <label class="drop-zone" id="drop-zone" for="file-input">
+        <svg viewBox="0 0 40 40" aria-hidden="true">
+          <rect x="5" y="9" width="30" height="24" fill="none" stroke="currentColor" stroke-width="2.5"/>
+          <circle cx="14" cy="17" r="3" fill="none" stroke="currentColor" stroke-width="2"/>
+          <polyline points="7,31 17,22 23,27 28,21 34,28" fill="none" stroke="currentColor" stroke-width="2.5"/>
+        </svg>
+        <strong>Drop your photo here</strong>
+        <small>or click to choose a file</small>
+      </label>
+      <input type="file" id="file-input" accept="image/*">
+      <p id="file-name"></p>
+      <p id="error-msg"></p>
+    </div>
+
+    <div class="rail-section">
+      <p class="rail-label">Orientation <span class="val" id="rot-val">0&deg;</span></p>
+      <div class="rotate-row">
+        <button class="rail-btn" id="rot-left" disabled aria-label="Rotate left 90 degrees"><span class="ico">&#8634;</span>Left</button>
+        <button class="rail-btn" id="rot-right" disabled aria-label="Rotate right 90 degrees">Right<span class="ico" style="margin:0 0 0 4px;">&#8635;</span></button>
+      </div>
+    </div>
+
+    <div class="rail-section">
+      <p class="rail-label">Result</p>
+      <div class="stats">
+        <div class="stat"><span>Original</span><b id="st-orig">&mdash;</b></div>
+        <div class="stat"><span>Compressed</span><b id="st-new">&mdash;</b></div>
+      </div>
+    </div>
+
+    <div class="rail-section actions">
+      <button class="action-btn big" id="copy-btn" disabled>Copy Base64</button>
+      <button class="action-btn secondary" id="reset-btn">Start Over</button>
+    </div>
+
+    <div class="rail-section">
+      <ol class="steps">
+        <li><b>1</b>Drop a photo</li>
+        <li><b>2</b>Rotate it upright if needed</li>
+        <li><b>3</b>Click Copy Base64</li>
+        <li><b>4</b>Paste it into your HTML</li>
+      </ol>
+    </div>
+  </aside>
+
+  <main id="stage">
+    <section id="preview">
+      <span id="preview-tag">Compressed Preview</span>
+      <span id="working">Compressing&hellip;</span>
+      <img id="preview-img" alt="Compressed preview of your image">
+      <p id="empty-hint">Drop a photo anywhere to begin</p>
+    </section>
+
+    <section id="output-panel">
+      <p class="rail-label">Base64 Output <span class="val" id="char-count"></span></p>
+      <textarea id="output" readonly spellcheck="false" placeholder="Your base64 code will appear here &mdash; data:image/jpeg;base64,&hellip;"></textarea>
+    </section>
+
+    <div id="toast">Copied</div>
+  </main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ============================================================
+     AUTOMATIC SETTINGS
+     Start at 1200px wide / 80% quality. If the result is still
+     heavier than TARGET_KB, step quality down, then width down.
+  ============================================================ */
+  var TARGET_KB = 350;
+  var WIDTHS = [1200, 1000, 800];
+  var QUALITIES = [0.8, 0.7, 0.6];
+
+  var srcUrl = null;
+  var srcImg = null;
+  var rotation = 0; // 0, 90, 180, 270 (clockwise)
+  var result = null;
+  var $ = function (id) { return document.getElementById(id); };
+
+  function fmtBytes(n) {
+    if (n < 1024 * 1024) return Math.round(n / 1024) + " KB";
+    return (n / (1024 * 1024)).toFixed(1) + " MB";
+  }
+  function base64Bytes(dataURL) {
+    var b64 = dataURL.slice(dataURL.indexOf(",") + 1);
+    var pad = b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0;
+    return Math.floor(b64.length * 3 / 4) - pad;
+  }
+  function showError(msg) {
+    var el = $("error-msg");
+    el.textContent = msg;
+    el.style.display = msg ? "block" : "none";
+  }
+  var toastTimer = null;
+  function toast(msg) {
+    var t = $("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove("show"); }, 1800);
+  }
+
+  /* ---------- compress ---------- */
+  function encode(img, maxW, q) {
+    var sideways = rotation % 180 !== 0;
+    var ow = sideways ? img.naturalHeight : img.naturalWidth;   // width after rotating
+    var oh = sideways ? img.naturalWidth : img.naturalHeight;
+    var w = Math.min(maxW, ow);
+    var h = Math.round(oh * (w / ow));
+    var c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    var ctx = c.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.fillStyle = "#ffffff";          // JPEG has no transparency
+    ctx.fillRect(0, 0, w, h);
+    ctx.translate(w / 2, h / 2);
+    ctx.rotate(rotation * Math.PI / 180);
+    var dw = sideways ? h : w, dh = sideways ? w : h;
+    ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+    var url = c.toDataURL("image/jpeg", q);
+    return { dataURL: url, bytes: base64Bytes(url), w: w, h: h };
+  }
+
+  function autoCompress(img) {
+    var best = null;
+    for (var i = 0; i < WIDTHS.length; i++) {
+      for (var j = 0; j < QUALITIES.length; j++) {
+        best = encode(img, WIDTHS[i], QUALITIES[j]);
+        if (best.bytes / 1024 <= TARGET_KB) return best;
+      }
+    }
+    return best; // smallest attempt
+  }
+
+  /* ---------- load ---------- */
+  function loadFile(file) {
+    showError("");
+    if (!file) return;
+    if (!/^image\//.test(file.type) && !/\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i.test(file.name)) {
+      showError("That doesn't look like a photo. Try a JPG or PNG file.");
+      return;
+    }
+    if (srcUrl) URL.revokeObjectURL(srcUrl);
+    srcUrl = URL.createObjectURL(file);
+    $("working").classList.add("show");
+
+    var img = new Image();
+    img.onload = function () {
+      // let the "Compressing" label paint before the work starts
+      setTimeout(function () {
+        srcImg = img;
+        rotation = 0;
+        result = autoCompress(img);
+        $("file-name").textContent = file.name;
+        $("st-orig").textContent = fmtBytes(file.size);
+        render();
+        $("working").classList.remove("show");
+      }, 30);
+    };
+    img.onerror = function () {
+      $("working").classList.remove("show");
+      showError("This browser can't open that file. iPhone photos (HEIC) often cause this — save the photo as a JPG first, then try again.");
+    };
+    img.src = srcUrl;
+  }
+
+  function render() {
+    var img = $("preview-img");
+    img.src = result.dataURL;
+    img.style.display = "block";
+    $("empty-hint").style.display = "none";
+    $("preview-tag").style.display = "block";
+    $("preview-tag").textContent = "Compressed Preview · " + result.w + " × " + result.h;
+    $("output").value = result.dataURL;
+    $("char-count").textContent = result.dataURL.length.toLocaleString() + " characters";
+    $("st-new").textContent = fmtBytes(result.bytes);
+    $("copy-btn").disabled = false;
+    $("rot-left").disabled = false;
+    $("rot-right").disabled = false;
+    $("rot-val").textContent = rotation + "\u00b0";
+  }
+
+  /* ---------- inputs: click, drop anywhere, paste ---------- */
+  var fileInput = $("file-input");
+  fileInput.addEventListener("change", function () {
+    loadFile(fileInput.files[0]);
+    fileInput.value = "";
+  });
+
+  var dragDepth = 0;
+  window.addEventListener("dragenter", function (e) {
+    e.preventDefault(); dragDepth++;
+    $("drop-zone").classList.add("over");
+    $("stage").classList.add("dropping");
+  });
+  window.addEventListener("dragleave", function (e) {
+    e.preventDefault(); dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) { $("drop-zone").classList.remove("over"); $("stage").classList.remove("dropping"); }
+  });
+  window.addEventListener("dragover", function (e) { e.preventDefault(); });
+  window.addEventListener("drop", function (e) {
+    e.preventDefault(); dragDepth = 0;
+    $("drop-zone").classList.remove("over"); $("stage").classList.remove("dropping");
+    if (e.dataTransfer && e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
+  });
+  window.addEventListener("paste", function (e) {
+    var items = (e.clipboardData && e.clipboardData.items) || [];
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf("image/") === 0) { loadFile(items[i].getAsFile()); return; }
+    }
+  });
+
+  /* ---------- rotate ---------- */
+  function rotate(by) {
+    if (!srcImg) return;
+    rotation = (rotation + by + 360) % 360;
+    $("working").classList.add("show");
+    setTimeout(function () {
+      result = autoCompress(srcImg);
+      render();
+      $("working").classList.remove("show");
+    }, 20);
+  }
+  $("rot-left").addEventListener("click", function () { rotate(-90); });
+  $("rot-right").addEventListener("click", function () { rotate(90); });
+
+  /* ---------- copy ---------- */
+  $("copy-btn").addEventListener("click", function () {
+    if (!result) return;
+    var text = result.dataURL;
+    function fallback() {
+      var ta = $("output");
+      ta.focus(); ta.select();
+      try { document.execCommand("copy"); toast("Base64 copied"); }
+      catch (err) { toast("Select the text and copy it manually"); }
+    }
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(function () { toast("Base64 copied"); }, fallback);
+    } else {
+      fallback();
+    }
+  });
+  $("output").addEventListener("focus", function () { this.select(); });
+
+  /* ---------- start over ---------- */
+  $("reset-btn").addEventListener("click", function () {
+    if (srcUrl) URL.revokeObjectURL(srcUrl);
+    srcUrl = result = null;
+    $("preview-img").style.display = "none";
+    $("preview-img").removeAttribute("src");
+    $("empty-hint").style.display = "block";
+    $("preview-tag").style.display = "none";
+    $("output").value = "";
+    $("char-count").textContent = "";
+    $("file-name").textContent = "";
+    $("st-orig").textContent = "—";
+    $("st-new").textContent = "—";
+    $("copy-btn").disabled = true;
+    $("rot-left").disabled = true;
+    $("rot-right").disabled = true;
+    $("rot-val").innerHTML = "0&deg;";
+    srcImg = null;
+    rotation = 0;
+    showError("");
+  });
+})();
+</script>
+</body>
+</html>
